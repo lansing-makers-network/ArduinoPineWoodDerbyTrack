@@ -45,11 +45,27 @@ const uint8_t  numeral595mapping[] PROGMEM = {
   B11111000,  // 7
   B10000000,  // 8
   B10011000,  // 9
-  B01111111,  // DP
-  B10111111   // -
+  B01111111,  // DP (10)
+  B10111111,  // -  (11)
+  B11111111   // OFF(12)
 }; 
 
 Adafruit_AlphaNum4 alpha4[5] = Adafruit_AlphaNum4();
+bool carPresent[5] = {false, false, false, false, false};
+
+enum track_state_m {
+  just_booted,
+  waiting_for_gate,
+  waiting_for_cars,
+  race_started,
+  turn_off_solenoid,
+  waiting_for_1st,
+  waiting_for_last,
+  race_timed_out
+  };
+  
+
+track_state_m track_state;
 
 void setup() {
   Serial.begin(115200);
@@ -137,53 +153,86 @@ void setup() {
 //  } // end for  
 
   Serial.println("Starting Main Loop");
-
+  track_state = just_booted;
 }
 
-//#define NUMBER_OF_CHANNELS 4
-//#define LANE_SNS_FINISH_1 1
-//#define LANE_SNS_START_1  7
-
 void loop() {
-  bool laneStatus[5] = {false, false, false, false, false};
 
-  // wait for starting Gate to be closed
-  while(!digitalRead(startGatePin)) { 
-    
+
+  if (track_state == just_booted) {
+  	track_state = waiting_for_gate;
+  }
+  else if (track_state == waiting_for_gate) {
+	  // wait for starting Gate to be closed
+	  delay(100);
+	  while(!digitalRead(startGatePin)) { 
+	    
+	    alpha4[0].clear();
+	    alpha4[1].writeDigitAscii(0, 'O');
+	    alpha4[1].writeDigitAscii(1, 'P');
+	    alpha4[1].writeDigitAscii(2, 'E');
+	    alpha4[1].writeDigitAscii(3, 'N');
+	
+	    alpha4[2].writeDigitAscii(0, 'G');
+	    alpha4[2].writeDigitAscii(1, 'A');
+	    alpha4[2].writeDigitAscii(2, 'T');
+	    alpha4[2].writeDigitAscii(3, 'E');
+	    alpha4[3].clear();
+	    
+	    alpha4[0].writeDisplay();
+	    alpha4[1].writeDisplay();
+	    alpha4[2].writeDisplay();
+	    alpha4[3].writeDisplay();
+	
+    	_num595[0] = 12;
+    	_num595[1] = 12;
+    	_num595[2] = 12;
+    	_num595[3] = 12;
+  		display595();
+
+	    delay(100);
+	  }
+	  track_state = waiting_for_cars;
+  }
+  else if (track_state == waiting_for_cars) {
+	  if (!digitalRead(startGatePin)) { 
+	  	track_state = waiting_for_gate;
+	  }
     for (uint8_t sensorPin = 0; sensorPin < LENGTH_OF_ARRAY(laneAssignmentStart); sensorPin++) {
       uint16_t finishValue = analogRead(laneAssignmentFinish[sensorPin]);
       uint16_t startValue = analogRead(laneAssignmentStart[sensorPin]);
       if (startValue < SensorThreshold) {
-      	laneStatus[sensorPin] = true; 
-      	_num595[sensorPin] = true;
+      	carPresent[sensorPin] = true; 
 	      alpha4[sensorPin].writeDigitAscii(0, ' ');
 	      alpha4[sensorPin].writeDigitAscii(1, 'C');
 	      alpha4[sensorPin].writeDigitAscii(2, 'a');
 	      alpha4[sensorPin].writeDigitAscii(3, 'r');
       }     
       else {
-      	laneStatus[sensorPin] = false;
-      	_num595[sensorPin] = false;
+      	carPresent[sensorPin] = false;
 	      alpha4[sensorPin].writeDigitAscii(0, 'N');
 	      alpha4[sensorPin].writeDigitAscii(1, 'o');
 	      alpha4[sensorPin].writeDigitAscii(2, 'n');
 	      alpha4[sensorPin].writeDigitAscii(3, 'e');
       }
       alpha4[sensorPin].writeDisplay();
+
+      if (finishValue < SensorThreshold) {
+      	_num595[sensorPin] = 1;
+      }     
+      else {
+      	_num595[sensorPin] = 12;
+      }
   		display595();
     }
-    delay(125);
-  }
-
-    if (!digitalRead(startGatePin))
+    if (!digitalRead(startTriggerPin))
     {
       digitalWrite(startSolenoidPin, HIGH);   // turn the LED on (HIGH is the voltage level)
-    }
-    else {
+		  delay(250);
       digitalWrite(startSolenoidPin, LOW);    // turn the LED off by making the voltage LOW
-    }    
-
-
+		  track_state = race_started;
+    }
+	}
 }
 
 // return an array of BCD digits from a long 
