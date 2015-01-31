@@ -7,7 +7,9 @@
 #define NUMBER_OF_CHANNELS 4
 #define LANE_SNS_FINISH_1 1
 #define LANE_SNS_START_1  7
-uint16_t SensorThreshold = 200;
+#define SensorThreshold 200
+#define MILLISRACETIMEOUT (1000 * 10) // 10 seconds
+#define SOLENOID_OPEN_PERIOD 250 //ms
 
 uint8_t laneAssignmentFinish[] = {1, 2, 3, 4};
 uint8_t laneAssignmentStart[] = {10, 9, 8, 7};
@@ -55,15 +57,27 @@ bool carPresent[5] = {false, false, false, false, false};
 
 enum track_state_m {
   just_booted,
-  waiting_for_gate,
-  waiting_for_cars,
+  print_waiting_for_closed_gate,
+  waiting_for_closed_gate,
+  waiting_for_cars_at_gate,
+	race_triggered,
+  waiting_for_gate_drop,
+  wait_to_turn_off_solenoid,
   race_started,
-  turn_off_solenoid,
-  waiting_for_1st,
+  waiting_for_cars_to_finish,
+	raced_finished,
   waiting_for_last,
   race_timed_out
   };
-  
+
+uint32_t microsRaceStart;
+uint32_t millisRaceStart;
+uint32_t millisCloseSolenoid;
+uint32_t millisRaceExpire;
+uint8_t placeOrder[LENGTH_OF_ARRAY(laneAssignmentFinish)];
+uint8_t lanesTimeMs[LENGTH_OF_ARRAY(laneAssignmentFinish)];
+uint8_t lanesTimeUs[LENGTH_OF_ARRAY(laneAssignmentFinish)];
+uint8_t currentPlace;
 
 track_state_m track_state;
 
@@ -160,13 +174,10 @@ void loop() {
 
 
   if (track_state == just_booted) {
-  	track_state = waiting_for_gate;
+  	track_state = print_waiting_for_closed_gate;
   }
-  else if (track_state == waiting_for_gate) {
-	  // wait for starting Gate to be closed
-	  delay(100);
-	  while(digitalRead(startGatePin)) { 
-	    
+  else if (track_state == print_waiting_for_closed_gate) {
+	  if(digitalRead(startGatePin)) { 
 	    alpha4[0].clear();
 	    alpha4[1].writeDigitAscii(0, 'O');
 	    alpha4[1].writeDigitAscii(1, 'P');
@@ -189,49 +200,153 @@ void loop() {
     	_num595[2] = 12;
     	_num595[3] = 12;
   		display595();
+	  }
 
+		// clear out any prior places
+    for (uint8_t lane = 0; lane < LENGTH_OF_ARRAY(laneAssignmentFinish); lane++) {
+			placeOrder[lane] = 0;
+			lanesTimeMs[lane] = 0;
+			lanesTimeUs[lane] = 0;			
+		}
+		currentPlace = 0;
+
+	  track_state = waiting_for_closed_gate;
+  }
+  else if (track_state == waiting_for_closed_gate) {
+	  if(digitalRead(startGatePin)) { 
 	    delay(100);
 	  }
-	  track_state = waiting_for_cars;
+	  else {
+		  track_state = waiting_for_cars_at_gate;
+		}
   }
-  else if (track_state == waiting_for_cars) {
-	  if (digitalRead(startGatePin)) { 
-	  	track_state = waiting_for_gate;
+  else if (track_state == waiting_for_cars_at_gate) {
+	  if (digitalRead(startGatePin)) { // if gate is open go back a step
+	  	track_state = print_waiting_for_closed_gate;
 	  }
-    for (uint8_t sensorPin = 0; sensorPin < LENGTH_OF_ARRAY(laneAssignmentStart); sensorPin++) {
-      uint16_t finishValue = analogRead(laneAssignmentFinish[sensorPin]);
-      uint16_t startValue = analogRead(laneAssignmentStart[sensorPin]);
-      if (startValue < SensorThreshold) {
-      	carPresent[sensorPin] = true; 
-	      alpha4[sensorPin].writeDigitAscii(0, ' ');
-	      alpha4[sensorPin].writeDigitAscii(1, 'C');
-	      alpha4[sensorPin].writeDigitAscii(2, 'a');
-	      alpha4[sensorPin].writeDigitAscii(3, 'r');
+    for (uint8_t lane = 0; lane < LENGTH_OF_ARRAY(laneAssignmentStart); lane++) {
+      if ((uint16_t) analogRead(laneAssignmentStart[lane]) < SensorThreshold) {
+	      alpha4[lane].writeDigitAscii(0, ' ');
+	      alpha4[lane].writeDigitAscii(1, 'C');
+	      alpha4[lane].writeDigitAscii(2, 'a');
+	      alpha4[lane].writeDigitAscii(3, 'r');
+        alpha4[lane].writeDisplay();
+	    	carPresent[lane] = true; 
       }     
       else {
-      	carPresent[sensorPin] = false;
-	      alpha4[sensorPin].writeDigitAscii(0, 'N');
-	      alpha4[sensorPin].writeDigitAscii(1, 'o');
-	      alpha4[sensorPin].writeDigitAscii(2, 'n');
-	      alpha4[sensorPin].writeDigitAscii(3, 'e');
+	      alpha4[lane].writeDigitAscii(0, 'N');
+	      alpha4[lane].writeDigitAscii(1, 'o');
+	      alpha4[lane].writeDigitAscii(2, 'n');
+	      alpha4[lane].writeDigitAscii(3, 'e');
+	      alpha4[lane].writeDisplay();
+      	carPresent[lane] = false;
       }
-      alpha4[sensorPin].writeDisplay();
 
-      if (finishValue < SensorThreshold) {
-      	_num595[sensorPin] = 1;
+      if ((uint16_t) analogRead(laneAssignmentFinish[lane]) < SensorThreshold) {
+      	_num595[lane] = 1; // "-"
+	  		display595();
       }     
       else {
-      	_num595[sensorPin] = 12;
+      	_num595[lane] = 12; // " "
+	  		display595();
       }
-  		display595();
     }
     if (!digitalRead(startTriggerPin))
     {
-      digitalWrite(startSolenoidPin, HIGH);   // turn the LED on (HIGH is the voltage level)
-		  delay(250);
-      digitalWrite(startSolenoidPin, LOW);    // turn the LED off by making the voltage LOW
-		  track_state = race_started;
+		  track_state = race_triggered;
     }
+    delay(100);
+  }
+  else if (track_state == race_triggered) {
+		microsRaceStart = micros();
+		millisRaceStart = millis();
+		millisCloseSolenoid = (microsRaceStart + SOLENOID_OPEN_PERIOD);
+		millisRaceExpire = (microsRaceStart + MILLISRACETIMEOUT);
+		currentPlace = 0;
+		
+    digitalWrite(startSolenoidPin, HIGH); // open solenoid
+
+  	// update display for only lanes in use.
+    for (uint8_t lane = 0; lane < LENGTH_OF_ARRAY(laneAssignmentStart); lane++) {
+      if (carPresent[lane] == true) {
+	      alpha4[lane].writeDigitAscii(0, '?', HIGH);
+	      alpha4[lane].writeDigitAscii(1, '?');
+	      alpha4[lane].writeDigitAscii(2, '?');
+	      alpha4[lane].writeDigitAscii(3, '?');
+      }     
+      else {
+				alpha4[lane].clear();
+      }
+      alpha4[lane].writeDisplay();
+
+    	_num595[lane] = 12;
+  		display595();
+    }
+
+	  track_state = waiting_for_gate_drop;
+	}
+  else if (track_state == waiting_for_gate_drop) {
+		if(digitalRead(startGatePin)) { 
+	  	track_state = wait_to_turn_off_solenoid;
+	  }
+  }
+  else if (track_state == wait_to_turn_off_solenoid) {
+		if ((int32_t)(millis() - millisCloseSolenoid) > 0) {
+	    digitalWrite(startSolenoidPin, LOW);
+	
+		  track_state = race_started;
+		  track_state = waiting_for_cars_to_finish;
+		}
+	}
+  else if (track_state == waiting_for_cars_to_finish) {
+		uint8_t lanesWaiting = 0;
+		uint16_t finish_sensor_value[LENGTH_OF_ARRAY(laneAssignmentFinish)];
+
+  	if  ((int32_t)(millis() - millisRaceExpire) > 0) {
+		  track_state = raced_finished;
+  	}
+
+		// take a snap shot of in use lanes, in tight time frame.
+    for (uint8_t lane = 0; lane < LENGTH_OF_ARRAY(laneAssignmentFinish); lane++) {
+      if ((carPresent[lane] == true) && (lanesTimeUs[lane] == 0)) {
+	      finish_sensor_value[lane] = analogRead(laneAssignmentFinish[lane]);
+	      lanesWaiting++;
+	    }
+    }
+		
+		if (lanesWaiting == 0) {
+			track_state = raced_finished;
+		}
+		else {
+			// check for presense of car on in use lanes.
+	    for (uint8_t lane = 0; lane < LENGTH_OF_ARRAY(laneAssignmentFinish); lane++) {
+	      if ((carPresent[lane] == true) && (lanesTimeUs[lane] == 0) && (finish_sensor_value[lane] < SensorThreshold)) {
+					placeOrder[currentPlace++] = lane;
+					lanesTimeMs[lane] = millis() - millisRaceStart;
+					lanesTimeUs[lane] = micros() - microsRaceStart;
+	
+					// display place above lane
+	      	_num595[lane] = currentPlace;
+		  		display595();
+	
+					// display time above lane
+	  		  uint8_t bcd[4];
+		      long2bcd(lanesTimeMs[lane], bcd, 4);
+			    alpha4[lane].writeDigitAscii(0, 0x30 + bcd[3], HIGH);
+			    alpha4[lane].writeDigitAscii(1, 0x30 + bcd[2]);
+			    alpha4[lane].writeDigitAscii(2, 0x30 + bcd[1]);
+			    alpha4[lane].writeDigitAscii(3, 0x30 + bcd[0]);
+			    alpha4[lane].writeDisplay();
+				}
+			}
+		}
+
+  }
+  else if (track_state == raced_finished) {
+	  tone(buzzerPin[1], 262, 1000); //NOTE_C4
+		delay(1000);
+	  tone(buzzerPin[1], 262, 1000); //NOTE_C4
+  	track_state = waiting_for_closed_gate;
 	}
 }
 
