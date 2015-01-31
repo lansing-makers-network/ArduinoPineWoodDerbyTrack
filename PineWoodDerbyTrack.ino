@@ -73,8 +73,8 @@ uint32_t millisRaceStart;
 uint32_t millisCloseSolenoid;
 uint32_t millisRaceExpire;
 uint8_t placeOrder[LENGTH_OF_ARRAY(laneAssignmentFinish)];
-uint8_t lanesTimeMs[LENGTH_OF_ARRAY(laneAssignmentFinish)];
-uint8_t lanesTimeUs[LENGTH_OF_ARRAY(laneAssignmentFinish)];
+uint32_t lanesTimeMs[LENGTH_OF_ARRAY(laneAssignmentFinish)];
+uint32_t lanesTimeUs[LENGTH_OF_ARRAY(laneAssignmentFinish)];
 uint8_t currentPlace;
 
 track_state_m track_state;
@@ -112,7 +112,7 @@ void setup() {
   pinMode(startSolenoidPin, OUTPUT);
   
   // Test Solenoid
-  digitalWrite(startSolenoidPin, HIGH); // normal state is locked/LOW
+//  digitalWrite(startSolenoidPin, HIGH); // normal state is locked/LOW
   delay(500);
   digitalWrite(startSolenoidPin, LOW);
 
@@ -261,6 +261,13 @@ void loop() {
 		millisCloseSolenoid = (millisRaceStart + SOLENOID_OPEN_PERIOD);
 		millisRaceExpire = (millisRaceStart + MILLISRACETIMEOUT);
 		currentPlace = 0;
+Serial.print("microsRaceStart ="); Serial.print(microsRaceStart,DEC); Serial.println();  
+Serial.print("millisRaceStart ="); Serial.print(millisRaceStart,DEC); Serial.println();  
+Serial.print("millisCloseSolenoid ="); Serial.print(millisCloseSolenoid,DEC); Serial.println();  
+Serial.print("millisRaceExpire ="); Serial.print(millisRaceExpire,DEC); Serial.println();  
+Serial.print("currentPlace ="); Serial.print(currentPlace,DEC); Serial.println();  
+
+
 		
     digitalWrite(startSolenoidPin, HIGH); // open solenoid
 
@@ -335,6 +342,11 @@ void loop() {
 			    alpha4[lane].writeDigitAscii(2, 0x30 + bcd[1]);
 			    alpha4[lane].writeDigitAscii(3, 0x30 + bcd[0]);
 			    alpha4[lane].writeDisplay();
+Serial.print("millisRaceStart="); Serial.print(millisRaceStart,DEC);
+Serial.print(", microsRaceStart="); Serial.print(microsRaceStart,DEC);
+Serial.print(", millis()="); Serial.print(millis(),DEC);
+Serial.print(", lanesTimeMs["); Serial.print(lane,DEC);Serial.print("]="); Serial.print(lanesTimeMs[lane],DEC);
+Serial.print(", lanesTimeUs["); Serial.print(lane,DEC);Serial.print("]="); Serial.println(lanesTimeUs[lane],DEC);
 				}
 			}
 		}
