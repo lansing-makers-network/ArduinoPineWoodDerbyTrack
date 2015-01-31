@@ -4,16 +4,14 @@
 #include "Adafruit_GFX.h"
 #include "pitches.h"
 
-#define NUMBER_OF_CHANNELS 4
-#define LANE_SNS_FINISH_1 1
-#define LANE_SNS_START_1  7
-#define SensorThreshold 200
 #define MILLISRACETIMEOUT (1000 * 10) // 10 seconds
 #define SOLENOID_OPEN_PERIOD 250 //ms
 
-uint8_t laneAssignmentFinish[] = {1, 2, 3, 4};
-uint8_t laneAssignmentStart[] = {10, 9, 8, 7};
-uint8_t laneAssignmentAlpha4[] = {0x74, 0x73, 0x72, 0x71};
+uint8_t laneAssignmentFinish[ ]  = {   1,    2,    3,    4};
+uint8_t laneAssignmentStart[]    = {  10,    9,    8,    7};
+uint8_t laneAssignmentAlpha4[]   = {0x74, 0x73, 0x72, 0x71};
+uint16_t SensorFinishThreshold[] = { 200,  200,  200,  200};
+uint16_t SensorStartThreshold[]  = { 200,  200,  200,  200};
 
 #define LENGTH_OF_ARRAY(x) ((sizeof(x)/sizeof(x[0])))
 
@@ -225,7 +223,7 @@ void loop() {
 	  	track_state = print_waiting_for_closed_gate;
 	  }
     for (uint8_t lane = 0; lane < LENGTH_OF_ARRAY(laneAssignmentStart); lane++) {
-      if ((uint16_t) analogRead(laneAssignmentStart[lane]) < SensorThreshold) {
+      if ((uint16_t) analogRead(laneAssignmentStart[lane]) < SensorStartThreshold[lane]) {
 	      alpha4[lane].writeDigitAscii(0, ' ');
 	      alpha4[lane].writeDigitAscii(1, 'C');
 	      alpha4[lane].writeDigitAscii(2, 'a');
@@ -242,8 +240,8 @@ void loop() {
       	carPresent[lane] = false;
       }
 
-      if ((uint16_t) analogRead(laneAssignmentFinish[lane]) < SensorThreshold) {
-      	_num595[lane] = 1; // "-"
+      if ((uint16_t) analogRead(laneAssignmentFinish[lane]) < SensorFinishThreshold[lane]) {
+      	_num595[lane] = 11; // "-"
 	  		display595();
       }     
       else {
@@ -320,7 +318,7 @@ void loop() {
 		else {
 			// check for presense of car on in use lanes.
 	    for (uint8_t lane = 0; lane < LENGTH_OF_ARRAY(laneAssignmentFinish); lane++) {
-	      if ((carPresent[lane] == true) && (lanesTimeUs[lane] == 0) && (finish_sensor_value[lane] < SensorThreshold)) {
+	      if ((carPresent[lane] == true) && (lanesTimeUs[lane] == 0) && (finish_sensor_value[lane] < SensorFinishThreshold[lane])) {
 					placeOrder[currentPlace++] = lane;
 					lanesTimeMs[lane] = millis() - millisRaceStart;
 					lanesTimeUs[lane] = micros() - microsRaceStart;
@@ -340,7 +338,6 @@ void loop() {
 				}
 			}
 		}
-
   }
   else if (track_state == raced_finished) {
 	  tone(buzzerPin[1], 262, 1000); //NOTE_C4
