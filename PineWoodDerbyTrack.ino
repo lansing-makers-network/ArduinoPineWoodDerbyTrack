@@ -200,13 +200,6 @@ void loop() {
   		display595();
 	  }
 
-		// clear out any prior places
-    for (uint8_t lane = 0; lane < LENGTH_OF_ARRAY(laneAssignmentFinish); lane++) {
-			placeOrder[lane] = 0;
-			lanesTimeMs[lane] = 0;
-			lanesTimeUs[lane] = 0;			
-		}
-		currentPlace = 0;
 
 	  track_state = waiting_for_closed_gate;
   }
@@ -215,6 +208,13 @@ void loop() {
 	    delay(100);
 	  }
 	  else {
+			// clear out any prior places
+	    for (uint8_t lane = 0; lane < LENGTH_OF_ARRAY(laneAssignmentFinish); lane++) {
+				placeOrder[lane] = 0;
+				lanesTimeMs[lane] = 0;
+				lanesTimeUs[lane] = 0;			
+			}
+			currentPlace = 0;
 		  track_state = waiting_for_cars_at_gate;
 		}
   }
@@ -258,8 +258,8 @@ void loop() {
   else if (track_state == race_triggered) {
 		microsRaceStart = micros();
 		millisRaceStart = millis();
-		millisCloseSolenoid = (microsRaceStart + SOLENOID_OPEN_PERIOD);
-		millisRaceExpire = (microsRaceStart + MILLISRACETIMEOUT);
+		millisCloseSolenoid = (millisRaceStart + SOLENOID_OPEN_PERIOD);
+		millisRaceExpire = (millisRaceStart + MILLISRACETIMEOUT);
 		currentPlace = 0;
 		
     digitalWrite(startSolenoidPin, HIGH); // open solenoid
