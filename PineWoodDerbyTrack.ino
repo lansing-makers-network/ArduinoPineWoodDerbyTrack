@@ -165,7 +165,7 @@ void loop() {
   else if (track_state == waiting_for_gate) {
 	  // wait for starting Gate to be closed
 	  delay(100);
-	  while(!digitalRead(startGatePin)) { 
+	  while(digitalRead(startGatePin)) { 
 	    
 	    alpha4[0].clear();
 	    alpha4[1].writeDigitAscii(0, 'O');
@@ -195,7 +195,7 @@ void loop() {
 	  track_state = waiting_for_cars;
   }
   else if (track_state == waiting_for_cars) {
-	  if (!digitalRead(startGatePin)) { 
+	  if (digitalRead(startGatePin)) { 
 	  	track_state = waiting_for_gate;
 	  }
     for (uint8_t sensorPin = 0; sensorPin < LENGTH_OF_ARRAY(laneAssignmentStart); sensorPin++) {
