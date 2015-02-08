@@ -20,8 +20,7 @@ The cabling for these connections use readily available CAT-5 patch cables to co
 
 The display panel has both large Alphanumeric 2.3” digit driven by SPI based HC595 IC’s and smaller Alphanumeric Quad 0.54” Digits driven by I2C based HT16K33 backpack modules over each lane to indicate both the winning order of place and its elapsed time of the race. The digits are mounted into a laser cut 1/8” plywood, providing alignment behind smoke grey transparent acrylic producing a comfortable to read display. The Arduino’s firmware is open source and available on LMN’s Github repo, which additionally uses the alphanumeric digits to provide auxiliary information about status. Making it easier to operate the track, indicating when racers are ready, missing, when the track is not yet ready or when the race is completed.
  
-
-20150131_121911
+http://youtu.be/da9Q15YSw38
 
 Michael P. Flaga, michael@flaga.net
 
