@@ -94,6 +94,9 @@ void setup() {
     alpha4[channel].begin(laneAssignmentAlpha4[channel]);  // pass in the address
   }
 
+  // speed up I2C clock rate
+  TWBR = 2;
+
   // Pre-Operating Self Test Sequences
 
   // Initialize Starting Trigger input.
