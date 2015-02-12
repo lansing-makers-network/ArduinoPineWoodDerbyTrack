@@ -3,11 +3,11 @@
 #include "Adafruit_LEDBackpack.h"
 #include "Adafruit_GFX.h"
 
-#define MILLISRACETIMEOUT (1000 * 10) // 10 seconds
-#define SOLENOID_OPEN_PERIOD 250 //ms
-#define GATE_OPEN_TIMEOUT 3000 //ms
+uint32_t millisRaceTimeOut = (1000 * 10); // 10 seconds
+uint32_t solenoidOpenPeriod = 250; //ms
+uint32_t gateOpenTimeOut = 3000; //ms
 
-#define SHOW_RUNNING_TIME
+uint32_t runningTimeUpdateRate = 10; //ms (0 is off)
 
 uint8_t laneAssignmentFinish[ ]  = {   1,    2,    3,    4};
 uint8_t laneAssignmentStart[]    = {  10,    9,    8,    7};
@@ -63,7 +63,6 @@ enum track_state_m {
   race_triggered,
   waiting_for_gate_drop,
   wait_to_turn_off_solenoid,
-  race_started,
   waiting_for_cars_to_finish,
   raced_finished
 };
@@ -76,7 +75,6 @@ char track_states[][40] = {
   "race_triggered",
   "waiting_for_gate_drop",
   "wait_to_turn_off_solenoid",
-  "race_started",
   "waiting_for_cars_to_finish",
   "raced_finished"
 };
@@ -87,6 +85,8 @@ uint32_t millisRaceTriggered;
 uint32_t millisCloseSolenoid;
 uint32_t millisGateTimeOut;
 uint32_t millisRaceExpire;
+uint32_t millisCurrentRaceDuration;
+uint32_t nextPrintCurrentTime;
 uint8_t placeOrder[LENGTH_OF_ARRAY(laneAssignmentFinish)];
 uint32_t lanesTimeMs[LENGTH_OF_ARRAY(laneAssignmentFinish)];
 uint32_t lanesTimeUs[LENGTH_OF_ARRAY(laneAssignmentFinish)];
@@ -200,7 +200,6 @@ void loop() {
       display595();
     }
 
-
     track_state = waiting_for_closed_gate;
   }
   else if (track_state == waiting_for_closed_gate) {
@@ -256,9 +255,9 @@ void loop() {
   }
   else if (track_state == race_triggered) {
     millisRaceTriggered = millis();
-    millisCloseSolenoid = (millisRaceTriggered + SOLENOID_OPEN_PERIOD);
-    millisGateTimeOut = (millisRaceTriggered + GATE_OPEN_TIMEOUT);
-    millisRaceExpire = (millisRaceTriggered + MILLISRACETIMEOUT);
+    millisCloseSolenoid = (millisRaceTriggered + solenoidOpenPeriod);
+    millisGateTimeOut = (millisRaceTriggered + gateOpenTimeOut);
+    millisRaceExpire = (millisRaceTriggered + millisRaceTimeOut);
     currentPlace = 0;
     Serial.print("millisRaceTriggered ="); Serial.print(millisRaceTriggered,DEC); Serial.println();
     Serial.print("millisCloseSolenoid ="); Serial.print(millisCloseSolenoid,DEC); Serial.println();
@@ -329,7 +328,7 @@ void loop() {
       _num595[2] = 12;
       _num595[3] = 12;
       display595();
-      
+
       track_state = wait_to_turn_off_solenoid;
     }
   }
@@ -337,16 +336,24 @@ void loop() {
     if ((int32_t)(millis() - millisCloseSolenoid) > 0) {
       digitalWrite(startSolenoidPin, LOW);
 
-      track_state = race_started;
+      nextPrintCurrentTime = (millis() - millisRaceStart) + runningTimeUpdateRate;
+
       track_state = waiting_for_cars_to_finish;
     }
   }
   else if (track_state == waiting_for_cars_to_finish) {
     uint8_t lanesWaiting = 0;
     uint16_t finish_sensor_value[LENGTH_OF_ARRAY(laneAssignmentFinish)];
+    bool updateTime = false;
 
     if  ((int32_t)(millis() - millisRaceExpire) > 0) {
       track_state = raced_finished;
+    }
+
+    millisCurrentRaceDuration = millis() - millisRaceStart;
+    if ((millisCurrentRaceDuration > nextPrintCurrentTime) && (runningTimeUpdateRate > 0)) {
+      nextPrintCurrentTime = millisCurrentRaceDuration + runningTimeUpdateRate;
+      updateTime = true;
     }
 
     // take a snap shot of in use lanes, in tight time frame.
@@ -371,11 +378,11 @@ void loop() {
             placeOrder[currentPlace++] = lane;
             lanesTimeMs[lane] = millis() - millisRaceStart;
             lanesTimeUs[lane] = micros() - microsRaceStart;
-  
+
             // display place above lane
             _num595[lane] = currentPlace;
             display595();
-  
+
             // display time above lane
             uint8_t bcd[4];
             long2bcd(lanesTimeMs[lane], bcd, 4);
@@ -388,14 +395,12 @@ void loop() {
             Serial.print(", lanesTimeMs["); Serial.print(lane,DEC);Serial.print("]="); Serial.print(lanesTimeMs[lane],DEC);
             Serial.print(", lanesTimeUs["); Serial.print(lane,DEC);Serial.print("]="); Serial.println(lanesTimeUs[lane],DEC);
           }
-          else {
-#ifdef SHOW_RUNNING_TIME
+          else if ((updateTime) && (runningTimeUpdateRate > 0)) {
             alpha4[lane].writeDigitAscii(0, 0x30 + currentTimebcd[3], HIGH);
             alpha4[lane].writeDigitAscii(1, 0x30 + currentTimebcd[2]);
             alpha4[lane].writeDigitAscii(2, 0x30 + currentTimebcd[1]);
             alpha4[lane].writeDigitAscii(3, 0x30 + currentTimebcd[0]);
             alpha4[lane].writeDisplay();
-#endif // SHOW_RUNNING_TIME            
           }
         }
       }
@@ -408,7 +413,7 @@ void loop() {
     track_state = waiting_for_closed_gate;
   }
   // End of track_state machine
-  
+
   if (track_state != prv_track_state) {
     Serial.print("New track state = ");
     Serial.println(track_states[prv_track_state]);
