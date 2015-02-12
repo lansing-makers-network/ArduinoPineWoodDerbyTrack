@@ -7,6 +7,8 @@
 #define SOLENOID_OPEN_PERIOD 250 //ms
 #define GATE_OPEN_TIMEOUT 3000 //ms
 
+#define SHOW_RUNNING_TIME
+
 uint8_t laneAssignmentFinish[ ]  = {   1,    2,    3,    4};
 uint8_t laneAssignmentStart[]    = {  10,    9,    8,    7};
 uint8_t laneAssignmentAlpha4[]   = {0x74, 0x73, 0x72, 0x71};
@@ -359,28 +361,42 @@ void loop() {
       track_state = raced_finished;
     }
     else {
+      uint8_t currentTimebcd[4];
+      long2bcd(millis() - millisRaceStart, currentTimebcd, 4);
+
       // check for presense of car on in use lanes.
       for (uint8_t lane = 0; lane < LENGTH_OF_ARRAY(laneAssignmentFinish); lane++) {
-        if ((carPresent[lane] == true) && (lanesTimeUs[lane] == 0) && (finish_sensor_value[lane] < SensorFinishThreshold[lane])) {
-          placeOrder[currentPlace++] = lane;
-          lanesTimeMs[lane] = millis() - millisRaceStart;
-          lanesTimeUs[lane] = micros() - microsRaceStart;
-
-          // display place above lane
-          _num595[lane] = currentPlace;
-          display595();
-
-          // display time above lane
-          uint8_t bcd[4];
-          long2bcd(lanesTimeMs[lane], bcd, 4);
-          alpha4[lane].writeDigitAscii(0, 0x30 + bcd[3], HIGH);
-          alpha4[lane].writeDigitAscii(1, 0x30 + bcd[2]);
-          alpha4[lane].writeDigitAscii(2, 0x30 + bcd[1]);
-          alpha4[lane].writeDigitAscii(3, 0x30 + bcd[0]);
-          alpha4[lane].writeDisplay();
-          Serial.print("currentPlace="); Serial.print(currentPlace,DEC);
-          Serial.print(", lanesTimeMs["); Serial.print(lane,DEC);Serial.print("]="); Serial.print(lanesTimeMs[lane],DEC);
-          Serial.print(", lanesTimeUs["); Serial.print(lane,DEC);Serial.print("]="); Serial.println(lanesTimeUs[lane],DEC);
+        if ((carPresent[lane] == true) && (lanesTimeUs[lane] == 0)) {
+          if (finish_sensor_value[lane] < SensorFinishThreshold[lane]) {
+            placeOrder[currentPlace++] = lane;
+            lanesTimeMs[lane] = millis() - millisRaceStart;
+            lanesTimeUs[lane] = micros() - microsRaceStart;
+  
+            // display place above lane
+            _num595[lane] = currentPlace;
+            display595();
+  
+            // display time above lane
+            uint8_t bcd[4];
+            long2bcd(lanesTimeMs[lane], bcd, 4);
+            alpha4[lane].writeDigitAscii(0, 0x30 + bcd[3], HIGH);
+            alpha4[lane].writeDigitAscii(1, 0x30 + bcd[2]);
+            alpha4[lane].writeDigitAscii(2, 0x30 + bcd[1]);
+            alpha4[lane].writeDigitAscii(3, 0x30 + bcd[0]);
+            alpha4[lane].writeDisplay();
+            Serial.print("currentPlace="); Serial.print(currentPlace,DEC);
+            Serial.print(", lanesTimeMs["); Serial.print(lane,DEC);Serial.print("]="); Serial.print(lanesTimeMs[lane],DEC);
+            Serial.print(", lanesTimeUs["); Serial.print(lane,DEC);Serial.print("]="); Serial.println(lanesTimeUs[lane],DEC);
+          }
+          else {
+#ifdef SHOW_RUNNING_TIME
+            alpha4[lane].writeDigitAscii(0, 0x30 + currentTimebcd[3], HIGH);
+            alpha4[lane].writeDigitAscii(1, 0x30 + currentTimebcd[2]);
+            alpha4[lane].writeDigitAscii(2, 0x30 + currentTimebcd[1]);
+            alpha4[lane].writeDigitAscii(3, 0x30 + currentTimebcd[0]);
+            alpha4[lane].writeDisplay();
+#endif // SHOW_RUNNING_TIME            
+          }
         }
       }
     }
