@@ -5,6 +5,7 @@
 
 #define MILLISRACETIMEOUT (1000 * 10) // 10 seconds
 #define SOLENOID_OPEN_PERIOD 250 //ms
+#define GATE_OPEN_TIMEOUT 3000 //ms
 
 uint8_t laneAssignmentFinish[ ]  = {   1,    2,    3,    4};
 uint8_t laneAssignmentStart[]    = {  10,    9,    8,    7};
@@ -65,9 +66,24 @@ enum track_state_m {
   raced_finished
 };
 
+char track_states[][40] = {
+  "just_booted",
+  "print_waiting_for_closed_gate",
+  "waiting_for_closed_gate",
+  "waiting_for_cars_at_gate",
+  "race_triggered",
+  "waiting_for_gate_drop",
+  "wait_to_turn_off_solenoid",
+  "race_started",
+  "waiting_for_cars_to_finish",
+  "raced_finished"
+};
+
 uint32_t microsRaceStart;
 uint32_t millisRaceStart;
+uint32_t millisRaceTriggered;
 uint32_t millisCloseSolenoid;
+uint32_t millisGateTimeOut;
 uint32_t millisRaceExpire;
 uint8_t placeOrder[LENGTH_OF_ARRAY(laneAssignmentFinish)];
 uint32_t lanesTimeMs[LENGTH_OF_ARRAY(laneAssignmentFinish)];
@@ -75,6 +91,7 @@ uint32_t lanesTimeUs[LENGTH_OF_ARRAY(laneAssignmentFinish)];
 uint8_t currentPlace;
 
 track_state_m track_state;
+track_state_m prv_track_state;
 
 void setup() {
   Serial.begin(115200);
@@ -149,22 +166,25 @@ void setup() {
 
 void loop() {
 
+  // Begin of track_state machine
   if (track_state == just_booted) {
     track_state = print_waiting_for_closed_gate;
   }
   else if (track_state == print_waiting_for_closed_gate) {
     if(digitalRead(startGatePin)) {
-      alpha4[0].clear();
-      alpha4[1].writeDigitAscii(0, 'O');
-      alpha4[1].writeDigitAscii(1, 'P');
-      alpha4[1].writeDigitAscii(2, 'E');
-      alpha4[1].writeDigitAscii(3, 'N');
+      alpha4[3].clear();
 
       alpha4[2].writeDigitAscii(0, 'G');
       alpha4[2].writeDigitAscii(1, 'A');
       alpha4[2].writeDigitAscii(2, 'T');
       alpha4[2].writeDigitAscii(3, 'E');
-      alpha4[3].clear();
+
+      alpha4[1].writeDigitAscii(0, 'O');
+      alpha4[1].writeDigitAscii(1, 'P');
+      alpha4[1].writeDigitAscii(2, 'E');
+      alpha4[1].writeDigitAscii(3, 'N');
+
+      alpha4[0].clear();
 
       alpha4[0].writeDisplay();
       alpha4[1].writeDisplay();
@@ -233,18 +253,15 @@ void loop() {
     delay(100);
   }
   else if (track_state == race_triggered) {
-    microsRaceStart = micros();
-    millisRaceStart = millis();
-    millisCloseSolenoid = (millisRaceStart + SOLENOID_OPEN_PERIOD);
-    millisRaceExpire = (millisRaceStart + MILLISRACETIMEOUT);
+    millisRaceTriggered = millis();
+    millisCloseSolenoid = (millisRaceTriggered + SOLENOID_OPEN_PERIOD);
+    millisGateTimeOut = (millisRaceTriggered + GATE_OPEN_TIMEOUT);
+    millisRaceExpire = (millisRaceTriggered + MILLISRACETIMEOUT);
     currentPlace = 0;
-    Serial.print("microsRaceStart ="); Serial.print(microsRaceStart,DEC); Serial.println();
-    Serial.print("millisRaceStart ="); Serial.print(millisRaceStart,DEC); Serial.println();
+    Serial.print("millisRaceTriggered ="); Serial.print(millisRaceTriggered,DEC); Serial.println();
     Serial.print("millisCloseSolenoid ="); Serial.print(millisCloseSolenoid,DEC); Serial.println();
+    Serial.print("millisGateTimeOut ="); Serial.print(millisGateTimeOut,DEC); Serial.println();
     Serial.print("millisRaceExpire ="); Serial.print(millisRaceExpire,DEC); Serial.println();
-    Serial.print("currentPlace ="); Serial.print(currentPlace,DEC); Serial.println();
-
-
 
     digitalWrite(startSolenoidPin, HIGH); // open solenoid
 
@@ -269,6 +286,48 @@ void loop() {
   }
   else if (track_state == waiting_for_gate_drop) {
     if(digitalRead(startGatePin)) {
+      microsRaceStart = micros();
+      millisRaceStart = millis();
+      Serial.print("microsRaceStart ="); Serial.print(microsRaceStart,DEC); Serial.println();
+      Serial.print("millisRaceStart ="); Serial.print(millisRaceStart,DEC); Serial.println();
+
+      track_state = wait_to_turn_off_solenoid;
+    }
+    else if ((int32_t)(millis() - millisGateTimeOut) > 0) {
+      digitalWrite(startSolenoidPin, LOW);
+
+      Serial.println("Gate Jammed!");
+      alpha4[3].writeDigitAscii(0, 'P');
+      alpha4[3].writeDigitAscii(1, 'R');
+      alpha4[3].writeDigitAscii(2, 'O');
+      alpha4[3].writeDigitAscii(3, 'B');
+
+      alpha4[2].writeDigitAscii(0, 'L');
+      alpha4[2].writeDigitAscii(1, 'E');
+      alpha4[2].writeDigitAscii(2, 'M');
+      alpha4[2].writeDigitAscii(3, ' ');
+
+      alpha4[1].writeDigitAscii(0, 'G');
+      alpha4[1].writeDigitAscii(1, 'A');
+      alpha4[1].writeDigitAscii(2, 'T');
+      alpha4[1].writeDigitAscii(3, 'E');
+
+      alpha4[0].writeDigitAscii(0, 'J');
+      alpha4[0].writeDigitAscii(1, 'A');
+      alpha4[0].writeDigitAscii(2, 'M');
+      alpha4[0].writeDigitAscii(3, 'M');
+
+      alpha4[0].writeDisplay();
+      alpha4[1].writeDisplay();
+      alpha4[2].writeDisplay();
+      alpha4[3].writeDisplay();
+
+      _num595[0] = 12;
+      _num595[1] = 12;
+      _num595[2] = 12;
+      _num595[3] = 12;
+      display595();
+      
       track_state = wait_to_turn_off_solenoid;
     }
   }
@@ -319,9 +378,7 @@ void loop() {
           alpha4[lane].writeDigitAscii(2, 0x30 + bcd[1]);
           alpha4[lane].writeDigitAscii(3, 0x30 + bcd[0]);
           alpha4[lane].writeDisplay();
-          Serial.print("millisRaceStart="); Serial.print(millisRaceStart,DEC);
-          Serial.print(", microsRaceStart="); Serial.print(microsRaceStart,DEC);
-          Serial.print(", millis()="); Serial.print(millis(),DEC);
+          Serial.print("currentPlace="); Serial.print(currentPlace,DEC);
           Serial.print(", lanesTimeMs["); Serial.print(lane,DEC);Serial.print("]="); Serial.print(lanesTimeMs[lane],DEC);
           Serial.print(", lanesTimeUs["); Serial.print(lane,DEC);Serial.print("]="); Serial.println(lanesTimeUs[lane],DEC);
         }
@@ -333,6 +390,13 @@ void loop() {
     delay(1000);
     tone(buzzerPin[1], 262, 1000); //NOTE_C4
     track_state = waiting_for_closed_gate;
+  }
+  // End of track_state machine
+  
+  if (track_state != prv_track_state) {
+    Serial.print("New track state = ");
+    Serial.println(track_states[prv_track_state]);
+    prv_track_state = track_state;
   }
 }
 
