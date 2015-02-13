@@ -407,6 +407,18 @@ void loop() {
     }
   }
   else if (track_state == raced_finished) {
+    for (uint8_t lane = 0; lane < LENGTH_OF_ARRAY(laneAssignmentFinish); lane++) {
+      if ((carPresent[lane] == true) && (lanesTimeUs[lane] == 0)) {
+        _num595[lane] = 12;
+        display595();
+        alpha4[lane].writeDigitAscii(0, '-');
+        alpha4[lane].writeDigitAscii(1, '-');
+        alpha4[lane].writeDigitAscii(2, '-');
+        alpha4[lane].writeDigitAscii(3, '-');
+        alpha4[lane].writeDisplay();
+      }
+    }
+
     tone(buzzerPin[1], 262, 1000); //NOTE_C4
     delay(1000);
     tone(buzzerPin[1], 262, 1000); //NOTE_C4
