@@ -2,27 +2,30 @@
 #include <Wire.h>
 #include "Adafruit_LEDBackpack.h"
 #include "Adafruit_GFX.h"
+#include <Adafruit_NeoPixel.h>
 
-uint32_t millisRaceTimeOut = (1000 * 10); // 10 seconds
-uint32_t solenoidOpenPeriod = 250; //ms
-uint32_t gateOpenTimeOut = 3000; //ms
+uint32_t millisRaceTimeOut  = (1000 * 10); // 10 seconds
+uint32_t solenoidOpenPeriod =  250; //ms
+uint32_t gateOpenTimeOut    = 3000; //ms
 
 uint32_t runningTimeUpdateRate = 10; //ms (0 is off)
 
-uint8_t laneAssignmentFinish[ ]  = {   1,    2,    3,    4};
-uint8_t laneAssignmentStart[]    = {  10,    9,    8,    7};
-uint8_t laneAssignmentAlpha4[]   = {0x74, 0x73, 0x72, 0x71};
-uint16_t SensorFinishThreshold[] = { 200,  200,  200,  200};
-uint16_t SensorStartThreshold[]  = { 200,  200,  200,  200};
+//                      per Lane        1,    2,    4,    5
+uint8_t  laneAssignmentFinish[]   = {   1,    2,    3,    4}; // Input pins
+uint8_t  laneAssignmentStart[]    = {  10,    9,    8,    7}; // Input pins
+uint8_t  laneAssignmentAlpha4[]   = {0x74, 0x73, 0x72, 0x71}; // i2c addresses
+uint16_t SensorFinishThreshold[]  = { 200,  200,  200,  200}; // A2D threshold 
+uint16_t SensorStartThreshold[]   = { 200,  200,  200,  200}; // A2D threshold 
+uint8_t  laneAssignmentNeoPixel[] = {   0,    1,    2,    3}; // pixels order
 
 #define LENGTH_OF_ARRAY(x) ((sizeof(x)/sizeof(x[0])))
 
 // pin mapping of quad 595s driving 7 segment Lane-Place
 uint8_t latch595Pin = 53; //Pin connected to ST_CP of 74HC595
 uint8_t clock595Pin = 52; //Pin connected to SH_CP of 74HC595
-uint8_t data595Pin = 51; //Pin connected to DS of 74HC595
+uint8_t data595Pin  = 51; //Pin connected to DS of 74HC595
 uint8_t clear595Pin = 49; //Pin connected to DS of 74HC595
-uint8_t _num595[] = {0, 0, 0, 0};
+uint8_t _num595[]   = {0, 0, 0, 0}; // initialized blank values
 
 // pin mapping of Buzzer
 uint8_t buzzerPin[] = {11, 12};
@@ -35,6 +38,9 @@ uint8_t startTriggerPin = 3;
 
 // pin mapping of starting gate sensor
 uint8_t startGatePin = A6;
+
+// pin mapping of NeoPixel per lane at starting gate
+uint8_t neopixelPin = 6;
 
 const uint8_t  numeral595mapping[] PROGMEM = {
   B11000000,  // 0
@@ -51,6 +57,8 @@ const uint8_t  numeral595mapping[] PROGMEM = {
   B10111111,  // -  (11)
   B11111111   // OFF(12)
 };
+
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(LENGTH_OF_ARRAY(laneAssignmentNeoPixel), neopixelPin, NEO_GRB + NEO_KHZ800);
 
 Adafruit_AlphaNum4 alpha4[5] = Adafruit_AlphaNum4();
 bool carPresent[5] = {false, false, false, false, false};
@@ -87,10 +95,10 @@ uint32_t millisGateTimeOut;
 uint32_t millisRaceExpire;
 uint32_t millisCurrentRaceDuration;
 uint32_t nextPrintCurrentTime;
-uint8_t placeOrder[LENGTH_OF_ARRAY(laneAssignmentFinish)];
+uint8_t  placeOrder[LENGTH_OF_ARRAY(laneAssignmentFinish)];
 uint32_t lanesTimeMs[LENGTH_OF_ARRAY(laneAssignmentFinish)];
 uint32_t lanesTimeUs[LENGTH_OF_ARRAY(laneAssignmentFinish)];
-uint8_t currentPlace;
+uint8_t  currentPlace;
 
 track_state_m track_state;
 track_state_m prv_track_state;
@@ -107,6 +115,9 @@ void setup() {
   digitalWrite(clear595Pin, HIGH);
   SPI.begin();
   SPI.setClockDivider(SPI_CLOCK_DIV2);
+
+  strip.begin();
+  strip.show(); // Initialize all pixels to 'off'
 
   // Initialize Adafruit_LEDBackpack
   for (uint8_t channel = 0; channel < LENGTH_OF_ARRAY(laneAssignmentAlpha4); channel++) {
@@ -161,6 +172,10 @@ void setup() {
     }
   }
   digitalWrite(startSolenoidPin, LOW);
+  colorWipe(strip.Color(255,   0,   0), 50); // Green
+  colorWipe(strip.Color(  0, 255,   0), 50); // Red
+  colorWipe(strip.Color(  0,   0, 255), 50); // Blue
+  colorWipe(strip.Color(255, 255, 255), 50); // White
 
   Serial.println("Starting Main Loop");
   track_state = just_booted;
@@ -228,6 +243,10 @@ void loop() {
         alpha4[lane].writeDigitAscii(2, 'a');
         alpha4[lane].writeDigitAscii(3, 'r');
         alpha4[lane].writeDisplay();
+
+        strip.setPixelColor(laneAssignmentNeoPixel[lane], strip.Color(255, 0, 0)); // Green
+        strip.show();
+
         carPresent[lane] = true;
       }
       else {
@@ -236,6 +255,10 @@ void loop() {
         alpha4[lane].writeDigitAscii(2, ' ');
         alpha4[lane].writeDigitAscii(3, ' ');
         alpha4[lane].writeDisplay();
+
+        strip.setPixelColor(laneAssignmentNeoPixel[lane], strip.Color(  0, 255,   0)); // Red
+        strip.show();
+
         carPresent[lane] = false;
       }
 
@@ -273,9 +296,13 @@ void loop() {
         alpha4[lane].writeDigitAscii(1, '?');
         alpha4[lane].writeDigitAscii(2, '?');
         alpha4[lane].writeDigitAscii(3, '?');
+        strip.setPixelColor(laneAssignmentNeoPixel[lane], strip.Color(153, 255,   0)); // ORANGE
+        strip.show();
       }
       else {
         alpha4[lane].clear();
+        strip.setPixelColor(laneAssignmentNeoPixel[lane], strip.Color(  0,   0,   0)); // OFF
+        strip.show();
       }
       alpha4[lane].writeDisplay();
 
@@ -383,6 +410,23 @@ void loop() {
             _num595[lane] = currentPlace;
             display595();
 
+            if (currentPlace == 1) {
+              strip.setPixelColor(laneAssignmentNeoPixel[lane], strip.Color(  0,   0, 255)); // Blue
+              strip.show();
+            }
+            else if (currentPlace == 2) {
+              strip.setPixelColor(laneAssignmentNeoPixel[lane], strip.Color(255,   0,   0)); // Red
+              strip.show();
+            }
+            else if (currentPlace == 3) {
+              strip.setPixelColor(laneAssignmentNeoPixel[lane], strip.Color(255, 255, 255)); // White
+              strip.show();
+            }
+            else if (currentPlace == 4) {
+              strip.setPixelColor(laneAssignmentNeoPixel[lane], strip.Color(255, 255,   0)); // Yellow
+              strip.show();
+            }
+
             // display time above lane
             uint8_t bcd[4];
             long2bcd(lanesTimeMs[lane], bcd, 4);
@@ -458,4 +502,13 @@ void display595 () {
   SPI.transfer(pgm_read_byte_near ( &(numeral595mapping[_num595[2]])));
   SPI.transfer(pgm_read_byte_near ( &(numeral595mapping[_num595[3]])));
   digitalWrite(latch595Pin, HIGH);
+}
+
+// Fill the dots one after the other with a color
+void colorWipe(uint32_t c, uint8_t wait) {
+  for(uint16_t i=0; i<strip.numPixels(); i++) {
+      strip.setPixelColor(i, c);
+      strip.show();
+      delay(wait);
+  }
 }
