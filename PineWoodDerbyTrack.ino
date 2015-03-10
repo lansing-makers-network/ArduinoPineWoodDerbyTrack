@@ -18,12 +18,14 @@ uint8_t  laneAssignmentNum595[]   = {   0,    1,    2,    3}; // Large Digit Dis
 uint16_t SensorFinishThreshold[]  = { 200,  200,  200,  200}; // A2D threshold 
 uint16_t SensorStartThreshold[]   = { 200,  200,  200,  200}; // A2D threshold 
 uint8_t  laneAssignmentNeoPixel[] = {   0,    1,    2,    3}; // pixels order
-uint8_t  PlaceColors[][3]         = {
+uint8_t  PlaceColorsNeoPixel[][3] = {
                                       {  0,   0, 255}, // Blue
                                       {  0, 255,   0}, // Red
                                       {255, 255, 255}, // White
                                       {255, 255,   0}, // Yellow
                                     };
+uint8_t  PlaceColorsTerminal[]    = {0x36, 0x31, 0x37, 0x33}; // ASCII ForeGround Colors
+
 
 #define LENGTH_OF_ARRAY(x) ((sizeof(x)/sizeof(x[0])))
 
@@ -247,8 +249,9 @@ void loop() {
         lanesTimeMs[lane] = 0;
         lanesTimeUs[lane] = 0;
       }
-      SerialBT->write(27); SerialBT->print("[2J"); //escape sequence clears all characters above and below the cursor location
-      SerialBT->write(27); SerialBT->print("[;H"); //sets cursor position to 0,0
+//      SerialBT->write(27); SerialBT->print("[2J"); //escape sequence clears all characters above and below the cursor location
+//      SerialBT->write(27); SerialBT->print("[;H"); //sets cursor position to 0,0
+      SerialBT->print("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
       SerialBT->println("Track Ready.");
       currentPlace = 0;
       track_state = waiting_for_cars_at_gate;
@@ -438,9 +441,9 @@ void loop() {
 
             strip.setPixelColor(laneAssignmentNeoPixel[lane], 
               strip.Color(
-                PlaceColors[currentPlace - 1][0],
-                PlaceColors[currentPlace - 1][1],
-                PlaceColors[currentPlace - 1][2]
+                PlaceColorsNeoPixel[currentPlace - 1][0],
+                PlaceColorsNeoPixel[currentPlace - 1][1],
+                PlaceColorsNeoPixel[currentPlace - 1][2]
               )
             );
             strip.show();
@@ -457,9 +460,11 @@ void loop() {
             SerialDebug->print(", lanesTimeMs["); SerialDebug->print(lane,DEC);SerialDebug->print("]="); SerialDebug->print(lanesTimeMs[lane],DEC);
             SerialDebug->print(", lanesTimeUs["); SerialDebug->print(lane,DEC);SerialDebug->print("]="); SerialDebug->println(lanesTimeUs[lane],DEC);
 
+            SerialBT->print(F("\033[01;3")); SerialBT->write(PlaceColorsTerminal[currentPlace - 1]);SerialBT->print(F("m"));
             SerialBT->print("Place="); SerialBT->print(currentPlace,DEC);
             SerialBT->print(", lanes="); SerialBT->print(lane + 1,DEC);
             SerialBT->print(", "); SerialBT->print(lanesTimeMs[lane],DEC);SerialBT->println("ms");
+            SerialBT->print(F("\033[00m"));
           }
           else if ((updateTime) && (runningTimeUpdateRate > 0)) {
             alpha4[lane].writeDigitAscii(0, 0x30 + currentTimebcd[3], HIGH); // with Period
@@ -499,6 +504,13 @@ void loop() {
     SerialDebug->println(track_states[prv_track_state]);
     prv_track_state = track_state;
   }
+  
+  if(SerialBT->available()) {
+    parse_menu(SerialBT); // get command from serial input
+  }
+  if(SerialDebug->available()) {
+    parse_menu(SerialDebug); // get command from serial input
+  }
 }
 
 // return an array of BCD digits from a long
@@ -535,4 +547,29 @@ void colorWipe(uint32_t c, uint8_t wait) {
       strip.show();
       delay(wait);
   }
+}
+
+void parse_menu(HardwareSerial *serial) {
+  byte key_command = serial->read();
+  serial->print(F("Received command: "));
+  serial->write(key_command);
+  serial->println(F(" "));
+  
+  if(key_command == 'h') {
+    serial->println(F("-----------------------------"));
+    serial->println(F("\033[01;31m"));
+    serial->println(F("Available commands..."));
+    serial->println(F("\033[00m"));
+    serial->println(F("-----------------------------"));
+    serial->println(F("[spacebar] Start Race"));
+    serial->println(F("-----------------------------"));
+    serial->println(F("Enter above key:"));
+    serial->println(F("-----------------------------"));
+  }
+  else if(key_command == ' ') {
+    serial->println(F("BT Starting Race!"));
+    track_state = race_triggered;
+  }
+
+  serial->println(track_states[prv_track_state]);
 }
