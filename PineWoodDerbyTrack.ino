@@ -111,13 +111,18 @@ track_state_m track_state;
 track_state_m prv_track_state;
 
 HardwareSerial *SerialDebug;
+HardwareSerial *SerialBT;
 
 void setup() {
 
   SerialDebug = &Serial;
+  SerialBT    = &Serial3;
 
   SerialDebug->begin(115200);
   SerialDebug->println("Starting Setup");
+
+  SerialBT->begin(115200);
+  SerialBT->println("Pinewood Derby Track.");
                                               
   //Initialize pins to output so you can control the quad 595 shift register
   pinMode(latch595Pin, OUTPUT);
@@ -225,6 +230,8 @@ void loop() {
       _num595[laneAssignmentNum595[2]] = 12;
       _num595[laneAssignmentNum595[3]] = 12;
       display595();
+
+      SerialBT->println("Gate is Open");
     }
 
     track_state = waiting_for_closed_gate;
@@ -240,6 +247,9 @@ void loop() {
         lanesTimeMs[lane] = 0;
         lanesTimeUs[lane] = 0;
       }
+      SerialBT->write(27); SerialBT->print("[2J"); //escape sequence clears all characters above and below the cursor location
+      SerialBT->write(27); SerialBT->print("[;H"); //sets cursor position to 0,0
+      SerialBT->println("Track Ready.");
       currentPlace = 0;
       track_state = waiting_for_cars_at_gate;
     }
@@ -298,7 +308,8 @@ void loop() {
     SerialDebug->print("millisCloseSolenoid ="); SerialDebug->print(millisCloseSolenoid,DEC); SerialDebug->println();
     SerialDebug->print("millisGateTimeOut ="); SerialDebug->print(millisGateTimeOut,DEC); SerialDebug->println();
     SerialDebug->print("millisRaceExpire ="); SerialDebug->print(millisRaceExpire,DEC); SerialDebug->println();
-
+    SerialBT->println("Race Started.");
+    
     digitalWrite(startSolenoidPin, HIGH); // open solenoid
 
     // update display for only lanes in use.
@@ -368,6 +379,8 @@ void loop() {
       _num595[laneAssignmentNum595[3]] = 12;
       display595();
 
+      SerialBT->println("Gate Jammed!");
+
       track_state = wait_to_turn_off_solenoid;
     }
   }
@@ -387,6 +400,7 @@ void loop() {
 
     if  ((int32_t)(millis() - millisRaceExpire) > 0) {
       track_state = raced_finished;
+      SerialBT->println("Race Timed Out.");
     }
 
     millisCurrentRaceDuration = millis() - millisRaceStart;
@@ -442,6 +456,10 @@ void loop() {
             SerialDebug->print("currentPlace="); SerialDebug->print(currentPlace,DEC);
             SerialDebug->print(", lanesTimeMs["); SerialDebug->print(lane,DEC);SerialDebug->print("]="); SerialDebug->print(lanesTimeMs[lane],DEC);
             SerialDebug->print(", lanesTimeUs["); SerialDebug->print(lane,DEC);SerialDebug->print("]="); SerialDebug->println(lanesTimeUs[lane],DEC);
+
+            SerialBT->print("Place="); SerialBT->print(currentPlace,DEC);
+            SerialBT->print(", lanes="); SerialBT->print(lane + 1,DEC);
+            SerialBT->print(", "); SerialBT->print(lanesTimeMs[lane],DEC);SerialBT->println("ms");
           }
           else if ((updateTime) && (runningTimeUpdateRate > 0)) {
             alpha4[lane].writeDigitAscii(0, 0x30 + currentTimebcd[3], HIGH); // with Period
@@ -466,6 +484,8 @@ void loop() {
         alpha4[lane].writeDisplay();
       }
     }
+
+    SerialBT->println("Race Completed.");
 
     tone(buzzerPin[1], 262, 1000); //NOTE_C4
     delay(1000);
