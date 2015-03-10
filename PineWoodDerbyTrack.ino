@@ -10,13 +10,20 @@ uint32_t gateOpenTimeOut    = 3000; //ms
 
 uint32_t runningTimeUpdateRate = 10; //ms (0 is off)
 
-//                      per Lane        1,    2,    4,    5
+//       per Lane                       1,    2,    3,    4
 uint8_t  laneAssignmentFinish[]   = {   1,    2,    3,    4}; // Input pins
 uint8_t  laneAssignmentStart[]    = {  10,    9,    8,    7}; // Input pins
 uint8_t  laneAssignmentAlpha4[]   = {0x74, 0x73, 0x72, 0x71}; // i2c addresses
+uint8_t  laneAssignmentNum595[]   = {   0,    1,    2,    3}; // Large Digit Display order
 uint16_t SensorFinishThreshold[]  = { 200,  200,  200,  200}; // A2D threshold 
 uint16_t SensorStartThreshold[]   = { 200,  200,  200,  200}; // A2D threshold 
 uint8_t  laneAssignmentNeoPixel[] = {   0,    1,    2,    3}; // pixels order
+uint8_t  PlaceColors[][3]         = {
+                                      {  0,   0, 255}, // Blue
+                                      {  0, 255,   0}, // Red
+                                      {255, 255, 255}, // White
+                                      {255, 255,   0}, // Yellow
+                                    };
 
 #define LENGTH_OF_ARRAY(x) ((sizeof(x)/sizeof(x[0])))
 
@@ -103,10 +110,15 @@ uint8_t  currentPlace;
 track_state_m track_state;
 track_state_m prv_track_state;
 
-void setup() {
-  Serial.begin(115200);
-  Serial.println("Starting Setup");
+HardwareSerial *SerialDebug;
 
+void setup() {
+
+  SerialDebug = &Serial;
+
+  SerialDebug->begin(115200);
+  SerialDebug->println("Starting Setup");
+                                              
   //Initialize pins to output so you can control the quad 595 shift register
   pinMode(latch595Pin, OUTPUT);
   //pinMode(clock595Pin, OUTPUT);
@@ -155,8 +167,8 @@ void setup() {
   for (uint8_t count = 0; count < LENGTH_OF_ARRAY(numeral595mapping); count++) {
 
     for (uint8_t channel = 0; channel < LENGTH_OF_ARRAY(laneAssignmentAlpha4); channel++) {
-      _num595[channel] = count;
-      alpha4[channel].writeDigitAscii(0, 0x30 + count, HIGH);
+      _num595[laneAssignmentNum595[channel]] = count;
+      alpha4[channel].writeDigitAscii(0, 0x30 + count, HIGH); // with Period
       alpha4[channel].writeDigitAscii(1, 0x30 + count);
       alpha4[channel].writeDigitAscii(2, 0x30 + count);
       alpha4[channel].writeDigitAscii(3, 0x30 + count);
@@ -177,7 +189,7 @@ void setup() {
   colorWipe(strip.Color(  0,   0, 255), 50); // Blue
   colorWipe(strip.Color(255, 255, 255), 50); // White
 
-  Serial.println("Starting Main Loop");
+  SerialDebug->println("Starting Main Loop");
   track_state = just_booted;
 }
 
@@ -208,10 +220,10 @@ void loop() {
       alpha4[2].writeDisplay();
       alpha4[3].writeDisplay();
 
-      _num595[0] = 12;
-      _num595[1] = 12;
-      _num595[2] = 12;
-      _num595[3] = 12;
+      _num595[laneAssignmentNum595[0]] = 12;
+      _num595[laneAssignmentNum595[1]] = 12;
+      _num595[laneAssignmentNum595[2]] = 12;
+      _num595[laneAssignmentNum595[3]] = 12;
       display595();
     }
 
@@ -263,11 +275,11 @@ void loop() {
       }
 
       if ((uint16_t) analogRead(laneAssignmentFinish[lane]) < SensorFinishThreshold[lane]) {
-        _num595[lane] = 11; // "-"
+        _num595[laneAssignmentNum595[lane]] = 11; // "-"
         display595();
       }
       else {
-        _num595[lane] = 12; // " "
+        _num595[laneAssignmentNum595[lane]] = 12; // " "
         display595();
       }
     }
@@ -282,17 +294,17 @@ void loop() {
     millisGateTimeOut = (millisRaceTriggered + gateOpenTimeOut);
     millisRaceExpire = (millisRaceTriggered + millisRaceTimeOut);
     currentPlace = 0;
-    Serial.print("millisRaceTriggered ="); Serial.print(millisRaceTriggered,DEC); Serial.println();
-    Serial.print("millisCloseSolenoid ="); Serial.print(millisCloseSolenoid,DEC); Serial.println();
-    Serial.print("millisGateTimeOut ="); Serial.print(millisGateTimeOut,DEC); Serial.println();
-    Serial.print("millisRaceExpire ="); Serial.print(millisRaceExpire,DEC); Serial.println();
+    SerialDebug->print("millisRaceTriggered ="); SerialDebug->print(millisRaceTriggered,DEC); SerialDebug->println();
+    SerialDebug->print("millisCloseSolenoid ="); SerialDebug->print(millisCloseSolenoid,DEC); SerialDebug->println();
+    SerialDebug->print("millisGateTimeOut ="); SerialDebug->print(millisGateTimeOut,DEC); SerialDebug->println();
+    SerialDebug->print("millisRaceExpire ="); SerialDebug->print(millisRaceExpire,DEC); SerialDebug->println();
 
     digitalWrite(startSolenoidPin, HIGH); // open solenoid
 
     // update display for only lanes in use.
     for (uint8_t lane = 0; lane < LENGTH_OF_ARRAY(laneAssignmentStart); lane++) {
       if (carPresent[lane] == true) {
-        alpha4[lane].writeDigitAscii(0, '?', HIGH);
+        alpha4[lane].writeDigitAscii(0, '?', HIGH); // with Period
         alpha4[lane].writeDigitAscii(1, '?');
         alpha4[lane].writeDigitAscii(2, '?');
         alpha4[lane].writeDigitAscii(3, '?');
@@ -306,7 +318,7 @@ void loop() {
       }
       alpha4[lane].writeDisplay();
 
-      _num595[lane] = 12;
+      _num595[laneAssignmentNum595[lane]] = 12;
       display595();
     }
 
@@ -316,15 +328,15 @@ void loop() {
     if(digitalRead(startGatePin)) {
       microsRaceStart = micros();
       millisRaceStart = millis();
-      Serial.print("microsRaceStart ="); Serial.print(microsRaceStart,DEC); Serial.println();
-      Serial.print("millisRaceStart ="); Serial.print(millisRaceStart,DEC); Serial.println();
+      SerialDebug->print("microsRaceStart ="); SerialDebug->print(microsRaceStart,DEC); SerialDebug->println();
+      SerialDebug->print("millisRaceStart ="); SerialDebug->print(millisRaceStart,DEC); SerialDebug->println();
 
       track_state = wait_to_turn_off_solenoid;
     }
     else if ((int32_t)(millis() - millisGateTimeOut) > 0) {
       digitalWrite(startSolenoidPin, LOW);
 
-      Serial.println("Gate Jammed!");
+      SerialDebug->println("Gate Jammed!");
       alpha4[3].writeDigitAscii(0, 'P');
       alpha4[3].writeDigitAscii(1, 'R');
       alpha4[3].writeDigitAscii(2, 'O');
@@ -350,10 +362,10 @@ void loop() {
       alpha4[2].writeDisplay();
       alpha4[3].writeDisplay();
 
-      _num595[0] = 12;
-      _num595[1] = 12;
-      _num595[2] = 12;
-      _num595[3] = 12;
+      _num595[laneAssignmentNum595[0]] = 12;
+      _num595[laneAssignmentNum595[1]] = 12;
+      _num595[laneAssignmentNum595[2]] = 12;
+      _num595[laneAssignmentNum595[3]] = 12;
       display595();
 
       track_state = wait_to_turn_off_solenoid;
@@ -407,40 +419,32 @@ void loop() {
             lanesTimeUs[lane] = micros() - microsRaceStart;
 
             // display place above lane
-            _num595[lane] = currentPlace;
+            _num595[laneAssignmentNum595[lane]] = currentPlace;
             display595();
 
-            if (currentPlace == 1) {
-              strip.setPixelColor(laneAssignmentNeoPixel[lane], strip.Color(  0,   0, 255)); // Blue
-              strip.show();
-            }
-            else if (currentPlace == 2) {
-              strip.setPixelColor(laneAssignmentNeoPixel[lane], strip.Color(255,   0,   0)); // Red
-              strip.show();
-            }
-            else if (currentPlace == 3) {
-              strip.setPixelColor(laneAssignmentNeoPixel[lane], strip.Color(255, 255, 255)); // White
-              strip.show();
-            }
-            else if (currentPlace == 4) {
-              strip.setPixelColor(laneAssignmentNeoPixel[lane], strip.Color(255, 255,   0)); // Yellow
-              strip.show();
-            }
+            strip.setPixelColor(laneAssignmentNeoPixel[lane], 
+              strip.Color(
+                PlaceColors[currentPlace - 1][0],
+                PlaceColors[currentPlace - 1][1],
+                PlaceColors[currentPlace - 1][2]
+              )
+            );
+            strip.show();
 
             // display time above lane
             uint8_t bcd[4];
             long2bcd(lanesTimeMs[lane], bcd, 4);
-            alpha4[lane].writeDigitAscii(0, 0x30 + bcd[3], HIGH);
+            alpha4[lane].writeDigitAscii(0, 0x30 + bcd[3], HIGH); // with Period
             alpha4[lane].writeDigitAscii(1, 0x30 + bcd[2]);
             alpha4[lane].writeDigitAscii(2, 0x30 + bcd[1]);
             alpha4[lane].writeDigitAscii(3, 0x30 + bcd[0]);
             alpha4[lane].writeDisplay();
-            Serial.print("currentPlace="); Serial.print(currentPlace,DEC);
-            Serial.print(", lanesTimeMs["); Serial.print(lane,DEC);Serial.print("]="); Serial.print(lanesTimeMs[lane],DEC);
-            Serial.print(", lanesTimeUs["); Serial.print(lane,DEC);Serial.print("]="); Serial.println(lanesTimeUs[lane],DEC);
+            SerialDebug->print("currentPlace="); SerialDebug->print(currentPlace,DEC);
+            SerialDebug->print(", lanesTimeMs["); SerialDebug->print(lane,DEC);SerialDebug->print("]="); SerialDebug->print(lanesTimeMs[lane],DEC);
+            SerialDebug->print(", lanesTimeUs["); SerialDebug->print(lane,DEC);SerialDebug->print("]="); SerialDebug->println(lanesTimeUs[lane],DEC);
           }
           else if ((updateTime) && (runningTimeUpdateRate > 0)) {
-            alpha4[lane].writeDigitAscii(0, 0x30 + currentTimebcd[3], HIGH);
+            alpha4[lane].writeDigitAscii(0, 0x30 + currentTimebcd[3], HIGH); // with Period
             alpha4[lane].writeDigitAscii(1, 0x30 + currentTimebcd[2]);
             alpha4[lane].writeDigitAscii(2, 0x30 + currentTimebcd[1]);
             alpha4[lane].writeDigitAscii(3, 0x30 + currentTimebcd[0]);
@@ -453,7 +457,7 @@ void loop() {
   else if (track_state == raced_finished) {
     for (uint8_t lane = 0; lane < LENGTH_OF_ARRAY(laneAssignmentFinish); lane++) {
       if ((carPresent[lane] == true) && (lanesTimeUs[lane] == 0)) {
-        _num595[lane] = 12;
+        _num595[laneAssignmentNum595[lane]] = 12;
         display595();
         alpha4[lane].writeDigitAscii(0, '-');
         alpha4[lane].writeDigitAscii(1, '-');
@@ -471,8 +475,8 @@ void loop() {
   // End of track_state machine
 
   if (track_state != prv_track_state) {
-    Serial.print("New track state = ");
-    Serial.println(track_states[prv_track_state]);
+    SerialDebug->print("New track state = ");
+    SerialDebug->println(track_states[prv_track_state]);
     prv_track_state = track_state;
   }
 }
@@ -497,10 +501,10 @@ void write595mapping (uint8_t num0, uint8_t num1, uint8_t num2, uint8_t num3) {
 
 void display595 () {
   digitalWrite(latch595Pin, LOW);
-  SPI.transfer(pgm_read_byte_near ( &(numeral595mapping[_num595[0]])));
-  SPI.transfer(pgm_read_byte_near ( &(numeral595mapping[_num595[1]])));
-  SPI.transfer(pgm_read_byte_near ( &(numeral595mapping[_num595[2]])));
-  SPI.transfer(pgm_read_byte_near ( &(numeral595mapping[_num595[3]])));
+  SPI.transfer(pgm_read_byte_near ( &(numeral595mapping[_num595[laneAssignmentNum595[0]]])));
+  SPI.transfer(pgm_read_byte_near ( &(numeral595mapping[_num595[laneAssignmentNum595[1]]])));
+  SPI.transfer(pgm_read_byte_near ( &(numeral595mapping[_num595[laneAssignmentNum595[2]]])));
+  SPI.transfer(pgm_read_byte_near ( &(numeral595mapping[_num595[laneAssignmentNum595[3]]])));
   digitalWrite(latch595Pin, HIGH);
 }
 
