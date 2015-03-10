@@ -108,6 +108,7 @@ uint8_t  placeOrder[LENGTH_OF_ARRAY(laneAssignmentFinish)];
 uint32_t lanesTimeMs[LENGTH_OF_ARRAY(laneAssignmentFinish)];
 uint32_t lanesTimeUs[LENGTH_OF_ARRAY(laneAssignmentFinish)];
 uint8_t  currentPlace;
+bool showRunningTime;
 
 track_state_m track_state;
 track_state_m prv_track_state;
@@ -195,6 +196,8 @@ void setup() {
   colorWipe(strip.Color(  0, 255,   0), 50); // Red
   colorWipe(strip.Color(  0,   0, 255), 50); // Blue
   colorWipe(strip.Color(255, 255, 255), 50); // White
+  
+  showRunningTime = true;
 
   SerialDebug->println("Starting Main Loop");
   track_state = just_booted;
@@ -466,7 +469,7 @@ void loop() {
             SerialBT->print(", "); SerialBT->print(lanesTimeMs[lane],DEC);SerialBT->println("ms");
             SerialBT->print(F("\033[00m"));
           }
-          else if ((updateTime) && (runningTimeUpdateRate > 0)) {
+          else if ((updateTime) && (runningTimeUpdateRate > 0) && showRunningTime) {
             alpha4[lane].writeDigitAscii(0, 0x30 + currentTimebcd[3], HIGH); // with Period
             alpha4[lane].writeDigitAscii(1, 0x30 + currentTimebcd[2]);
             alpha4[lane].writeDigitAscii(2, 0x30 + currentTimebcd[1]);
@@ -557,11 +560,12 @@ void parse_menu(HardwareSerial *serial) {
   
   if(key_command == 'h') {
     serial->println(F("-----------------------------"));
-    serial->println(F("\033[01;31m"));
     serial->println(F("Available commands..."));
-    serial->println(F("\033[00m"));
     serial->println(F("-----------------------------"));
     serial->println(F("[spacebar] Start Race"));
+    serial->println(F("[t] Toggle Running Time more accurate"));
+    serial->println(F("[d] Enable Debug on BT"));
+    serial->println(F("[D] Disable Debug on BT"));
     serial->println(F("-----------------------------"));
     serial->println(F("Enter above key:"));
     serial->println(F("-----------------------------"));
@@ -569,6 +573,26 @@ void parse_menu(HardwareSerial *serial) {
   else if(key_command == ' ') {
     serial->println(F("BT Starting Race!"));
     track_state = race_triggered;
+  }
+  else if(key_command == 't') {
+    showRunningTime = !showRunningTime;
+    serial->print(F("Show Running Time = "));
+    if (showRunningTime) {
+      serial->println(F("ON"));
+    }
+    else {
+      serial->println(F("OFF"));
+    }
+  }
+  else if(key_command == 'd') {
+    showRunningTime = !showRunningTime;
+    serial->print(F("BT Debug ON"));
+    SerialDebug = &Serial3;
+  }
+  else if(key_command == 'D') {
+    showRunningTime = !showRunningTime;
+    serial->print(F("BT Debug OFF"));
+    SerialDebug = &Serial;
   }
 
   serial->println(track_states[prv_track_state]);
